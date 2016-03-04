@@ -3,20 +3,26 @@
 
 // BEGIN AUTO-GENERATED UI CODE; DO NOT MODIFY
 static Window *s_window;
+static GFont s_res_gothic_18;
+static GFont s_res_gothic_18_bold;
 static GFont s_res_bitham_28;
 static GFont s_res_bitham_28_bold;
 
 #define NUMBER_PICKER_BOX_WIDTH 23
 #define NUMBER_PICKER_BOX_HEIGHT 40
 #define NUMBER_PICKER_PADDING 2
-#define CONTAINER_WIDTH 112
-#define COLON_WIDTH 20
+#define CONTAINER_WIDTH 114
+#define COLON_WIDTH 10
+#define COLON_PADDING 4
+#define COLON_VERTICAL_OFFSET 11
+#define LABEL_OFFSET 2
 
 static int cursor;
 static int num_digits;
 static NumberPickerType picker_type;
 static int* numbers;
 static char* title_message;
+static char* sub_message;
 
 // Graphics
 static GBitmap* up_bmp;
@@ -28,12 +34,34 @@ static Layer* root_layer;
 static ActionBarLayer* picker_action_bar;
 
 static void update_picker(Layer *layer, GContext *ctx) {
-  int width = NUMBER_PICKER_BOX_WIDTH * num_digits + picker_type == PICK_TIME ? COLON_WIDTH : 0;
+  GRect bounds = layer_get_bounds(layer);
+  int v_offset = bounds.size.h / 2 - NUMBER_PICKER_BOX_HEIGHT / 2;
+  int width = NUMBER_PICKER_BOX_WIDTH * num_digits + (picker_type == PICK_TIME ? COLON_WIDTH : 0);
   int offset = (CONTAINER_WIDTH - width) / 2;
+  
+  graphics_context_set_text_color(ctx, GColorBlack);
+  if (picker_type == PICK_TIME) {
+    // Draw "min" text.
+    graphics_draw_text(ctx, "min", s_res_gothic_18_bold, GRect(offset, v_offset + NUMBER_PICKER_BOX_HEIGHT + LABEL_OFFSET, NUMBER_PICKER_BOX_WIDTH * 2, 20), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+    // Draw "sec" text.
+    graphics_draw_text(ctx, "sec", s_res_gothic_18_bold, GRect(offset + NUMBER_PICKER_BOX_WIDTH * 2 + COLON_WIDTH, v_offset + NUMBER_PICKER_BOX_HEIGHT + LABEL_OFFSET, NUMBER_PICKER_BOX_WIDTH * 2, 20), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+  } else if (sub_message && strlen(sub_message) > 0) {
+    graphics_draw_text(ctx, sub_message, s_res_gothic_18_bold, GRect(offset, v_offset + NUMBER_PICKER_BOX_HEIGHT + LABEL_OFFSET, NUMBER_PICKER_BOX_WIDTH * 4, 20), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+  }
+  
+  graphics_draw_text(ctx, title_message, s_res_gothic_18_bold, GRect(2, 10, CONTAINER_WIDTH - 4, v_offset - 10), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
   
   char num_str[4];
   for (int i = 0; i < num_digits; i++) {
     if (picker_type == PICK_TIME && i == 2) {
+      // Draw colon.
+      graphics_context_set_fill_color(ctx, GColorBlack);
+      graphics_fill_circle(ctx, GPoint(
+        offset + COLON_WIDTH / 2,
+        v_offset + COLON_VERTICAL_OFFSET), COLON_WIDTH / 2 - COLON_PADDING);
+      graphics_fill_circle(ctx, GPoint(
+        offset + COLON_WIDTH / 2,
+        v_offset + NUMBER_PICKER_BOX_HEIGHT - COLON_VERTICAL_OFFSET), COLON_WIDTH / 2 - COLON_PADDING);
       offset += COLON_WIDTH;
     }
     GFont font;
@@ -49,17 +77,18 @@ static void update_picker(Layer *layer, GContext *ctx) {
       font = i < cursor ? s_res_bitham_28_bold : s_res_bitham_28;
     }
     snprintf(num_str, sizeof(num_str), "%d", numbers[i]);
-    GRect box = GRect(offset + NUMBER_PICKER_PADDING / 2, 45 + NUMBER_PICKER_PADDING / 2, NUMBER_PICKER_BOX_WIDTH - NUMBER_PICKER_PADDING / 2, NUMBER_PICKER_BOX_HEIGHT - NUMBER_PICKER_PADDING / 2);
+    GRect box = GRect(offset + NUMBER_PICKER_PADDING / 2, v_offset + NUMBER_PICKER_PADDING / 2, NUMBER_PICKER_BOX_WIDTH - NUMBER_PICKER_PADDING / 2, NUMBER_PICKER_BOX_HEIGHT - NUMBER_PICKER_PADDING / 2);
     graphics_fill_rect(ctx, box, 0, 0);
     graphics_draw_text(ctx, num_str, font, box, GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
-    graphics_draw_rect(ctx, GRect(offset, 45, NUMBER_PICKER_BOX_WIDTH, NUMBER_PICKER_BOX_HEIGHT));
+    graphics_draw_rect(ctx, GRect(offset, v_offset, NUMBER_PICKER_BOX_WIDTH, NUMBER_PICKER_BOX_HEIGHT));
     offset += NUMBER_PICKER_BOX_WIDTH;
   }
 }
 
 
 void change_current_value(int amount) {
-  numbers[cursor] = (numbers[cursor] + amount + 10) % 10;
+  int base = cursor == 2 && picker_type == PICK_TIME ? 6 : 10;
+  numbers[cursor] = (numbers[cursor] + amount + base) % base;
   layer_mark_dirty(root_layer);
 }
 
@@ -89,6 +118,8 @@ static void initialise_ui(void) {
   s_window = window_create();
   
   // Get font resources.
+  s_res_gothic_18 = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+  s_res_gothic_18_bold = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   s_res_bitham_28 = fonts_get_system_font(FONT_KEY_GOTHIC_28);
   s_res_bitham_28_bold = fonts_get_system_font(FONT_KEY_GOTHIC_28_BOLD);
   
@@ -124,7 +155,7 @@ static void handle_window_unload(Window* window) {
   destroy_ui();
 }
 
-void show_number_picker(int digits, int initial, char* message, NumberPickerType type) {
+void show_number_picker(int digits, int initial, char* message, char* units, NumberPickerType type) {
   num_digits = digits;
   numbers = (int*)malloc(sizeof(int) * digits);
   picker_type = type;
@@ -136,6 +167,7 @@ void show_number_picker(int digits, int initial, char* message, NumberPickerType
     div *= 10;
   }
   title_message = message;
+  sub_message = units;
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
     .unload = handle_window_unload,

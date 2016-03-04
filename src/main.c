@@ -217,8 +217,8 @@ void config_provider(Window *window) {
 }
 
 static void init() {
-  show_workout_creator();
-//   show_number_picker(4, 1200, "Distance (meters)", PICK_NUMBER);
+//   show_workout_creator();
+  show_number_picker(4, 800, "Select a distance", "meters", PICK_NUMBER);
 //   show_timer_window();
 //   timer_window = window_create();
   
