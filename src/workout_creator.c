@@ -25,7 +25,7 @@ typedef enum {ROOT, REPETITIONS, ACTIVITY, REST, CUSTOM, PLACEHOLDER} WorkoutTyp
 typedef enum {METERS, YARDS, KILOMETERS, MILES, FEET, UNKNOWN_DISTANCE} DistanceType;
 typedef enum {MINUTES, SECONDS} TimeType;
 typedef enum {BEFORE, MODIFY, AFTER} CursorType;
-typedef enum {DELETE_SHIFT, DELETE_ALL} DeleteType;
+typedef enum {DELETE_SHIFT, DELETE_ALL, DELETE_ALL_BRANCH} DeleteType;
 
 #define LINE_HEIGHT 16
 #define LINE_TAB 28
@@ -274,15 +274,28 @@ static void change_amount(ActionMenu *action_menu, const ActionMenuItem *action,
   }
 }
 
-static void delete_workout(Workout *past) {
+static void delete_workout(Workout *past, DeleteType delete_type) {
 //   if (!past->child && past->parent && past->parent->child == past && past->parent->child_last == past) {
 //     delete_workout(past->parent);
 //   }
   
+  if (delete_type == DELETE_ALL) {
+    if (past->child) {
+      delete_workout(past->child, DELETE_ALL_BRANCH);
+    }
+  } else if (delete_type == DELETE_ALL_BRANCH) {
+    if (past->child) {
+      delete_workout(past->child, DELETE_ALL_BRANCH);
+    }
+    if (past->next) {
+      delete_workout(past->next, DELETE_ALL_BRANCH);
+    }
+  }
+  
   // Create special cases:
   // Delete placeholder with parent of placeholder.
   if (past->child && past->child->type == PLACEHOLDER) {
-    delete_workout(past->child);
+    delete_workout(past->child, DELETE_SHIFT);
   }
   // If deleting last child of repetition event, create placeholder in place.
   if (past->type != PLACEHOLDER && past->parent && !past->child && past->parent->type == REPETITIONS && past->parent->child == past && past->parent->child_last == past) {
@@ -376,10 +389,7 @@ static void delete_event(ActionMenu *action_menu, const ActionMenuItem *action, 
 
   // Get the delete type.
   DeleteType delete_type = (DeleteType)action_menu_item_get_action_data(action);
-
-  if (delete_type == DELETE_SHIFT) {
-    delete_workout(past);
-  }
+  delete_workout(past, delete_type);
 }
 
 static void create_event(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
@@ -428,7 +438,7 @@ static void create_event(ActionMenu *action_menu, const ActionMenuItem *action, 
     workout->next = new_workout;
   }
   
-  delete_workout(cursor.workout);
+  delete_workout(cursor.workout, DELETE_SHIFT);
   // Set the cursor to the new workout.
   cursor.workout = new_workout;
   cursor.type = MODIFY;
@@ -479,9 +489,10 @@ static void init_action_menus() {
   action_menu_level_add_action(s_modify_event_level, "Delete", delete_event, (void *)DELETE_SHIFT);
   action_menu_level_add_action(s_modify_event_level, "Change Event", change_event, NULL);
   
-  s_modify_repetitions_level = action_menu_level_create(2);
-  action_menu_level_add_action(s_modify_repetitions_level, "Change Repetitions", change_amount, NULL);
+  s_modify_repetitions_level = action_menu_level_create(3);
+  action_menu_level_add_action(s_modify_repetitions_level, "Change repetitions", change_amount, NULL);
   action_menu_level_add_action(s_modify_repetitions_level, "Delete", delete_event, (void *)DELETE_SHIFT);
+  action_menu_level_add_action(s_modify_repetitions_level, "Delete all in group", delete_event, (void *)DELETE_ALL);
   
   s_create_event_level = action_menu_level_create(5);
   action_menu_level_add_action(s_create_event_level, "Create repetitions", create_event, NULL);
