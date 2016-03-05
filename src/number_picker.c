@@ -16,6 +16,7 @@ static GFont s_res_bitham_28_bold;
 #define COLON_PADDING 4
 #define COLON_VERTICAL_OFFSET 11
 #define LABEL_OFFSET 2
+#define LABEL_PADDING 4
 
 static int cursor;
 static int num_digits;
@@ -23,6 +24,7 @@ static NumberPickerType picker_type;
 static int* numbers;
 static char* title_message;
 static char* sub_message;
+static void (*func_callback)(int);
 
 // Graphics
 static GBitmap* up_bmp;
@@ -35,6 +37,8 @@ static ActionBarLayer* picker_action_bar;
 
 static void update_picker(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, bounds, 0, 0);
   int v_offset = bounds.size.h / 2 - NUMBER_PICKER_BOX_HEIGHT / 2;
   int width = NUMBER_PICKER_BOX_WIDTH * num_digits + (picker_type == PICK_TIME ? COLON_WIDTH : 0);
   int offset = (CONTAINER_WIDTH - width) / 2;
@@ -46,7 +50,7 @@ static void update_picker(Layer *layer, GContext *ctx) {
     // Draw "sec" text.
     graphics_draw_text(ctx, "sec", s_res_gothic_18_bold, GRect(offset + NUMBER_PICKER_BOX_WIDTH * 2 + COLON_WIDTH, v_offset + NUMBER_PICKER_BOX_HEIGHT + LABEL_OFFSET, NUMBER_PICKER_BOX_WIDTH * 2, 20), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
   } else if (sub_message && strlen(sub_message) > 0) {
-    graphics_draw_text(ctx, sub_message, s_res_gothic_18_bold, GRect(offset, v_offset + NUMBER_PICKER_BOX_HEIGHT + LABEL_OFFSET, NUMBER_PICKER_BOX_WIDTH * 4, 20), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, sub_message, s_res_gothic_18_bold, GRect(LABEL_PADDING, v_offset + NUMBER_PICKER_BOX_HEIGHT + LABEL_OFFSET, CONTAINER_WIDTH - LABEL_PADDING * 2, 20), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
   }
   
   graphics_draw_text(ctx, title_message, s_res_gothic_18_bold, GRect(2, 10, CONTAINER_WIDTH - 4, v_offset - 10), GTextOverflowModeWordWrap, GTextAlignmentCenter, NULL);
@@ -95,6 +99,18 @@ void change_current_value(int amount) {
 void toggle(ClickRecognizerRef recognizer, void *context) {
   if (cursor < num_digits - 1) {
     cursor++;
+  } else {
+    int result = 0;
+    if (picker_type == PICK_TIME) {
+      result = numbers[0] * 600 + numbers[1] * 60 + numbers[2] * 10 + numbers[3];
+    } else {
+      for (int i = 0; i < num_digits; i++) {
+        result = result * 10 + numbers[i];
+      }
+    }
+    func_callback(result);
+    hide_number_picker();
+    return;
   }
   layer_mark_dirty(root_layer);
 }
@@ -116,6 +132,7 @@ void picker_config_provider(void *context) {
 
 static void initialise_ui(void) {
   s_window = window_create();
+  window_set_background_color(s_window, GColorWhite);
   
   // Get font resources.
   s_res_gothic_18 = fonts_get_system_font(FONT_KEY_GOTHIC_18);
@@ -155,19 +172,27 @@ static void handle_window_unload(Window* window) {
   destroy_ui();
 }
 
-void show_number_picker(int digits, int initial, char* message, char* units, NumberPickerType type) {
+void show_number_picker(int digits, int initial, char* message, char* units, NumberPickerType type, void (*callback)(int)) {
   num_digits = digits;
   numbers = (int*)malloc(sizeof(int) * digits);
   picker_type = type;
   cursor = 0;
-  int i;
-  int div = 10;
-  for (i = 0; i < digits; i++) {
-    numbers[digits - i - 1] = (initial % div) / (div / 10);
-    div *= 10;
+  if (type == PICK_TIME) {
+    numbers[0] = initial / 600;
+    numbers[1] = (initial % 600) / 60;
+    numbers[2] = (initial % 60) / 10;
+    numbers[3] = initial % 10;
+  } else {
+    int i;
+    int div = 10;
+    for (i = 0; i < digits; i++) {
+      numbers[digits - i - 1] = (initial % div) / (div / 10);
+      div *= 10;
+    }
   }
   title_message = message;
   sub_message = units;
+  func_callback = callback;
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
     .unload = handle_window_unload,

@@ -1,6 +1,7 @@
 #include <pebble.h>
 #include "workout_creator.h"
-
+#include "workout.h"
+#include "number_picker.h"
 
 // Resources
 static GFont s_res_gothic_14;
@@ -19,31 +20,18 @@ static ActionMenu* s_action_menu;
 static ActionMenuLevel* s_modify_event_level;
 static ActionMenuLevel* s_modify_repetitions_level;
 static ActionMenuLevel* s_create_event_level;
+static ActionMenuLevel* s_distance_level;
 
-// Enums
-typedef enum {ROOT, REPETITIONS, ACTIVITY, REST, CUSTOM, PLACEHOLDER} WorkoutType;
-typedef enum {METERS, YARDS, KILOMETERS, MILES, FEET, UNKNOWN_DISTANCE} DistanceType;
-typedef enum {MINUTES, SECONDS} TimeType;
-typedef enum {BEFORE, MODIFY, AFTER} CursorType;
-typedef enum {DELETE_SHIFT, DELETE_ALL, DELETE_ALL_BRANCH} DeleteType;
+// Create pending data
+static WorkoutType saved_workout_type;
+static int saved_amount_type;
 
 #define LINE_HEIGHT 16
 #define LINE_TAB 28
 #define REPETITIONS_BOX_WIDTH 24
 #define REPETITIONS_LINE_WIDTH 2
 
-typedef struct Workout {
-  WorkoutType type;
-  int numeric_data;
-  int numeric_type_data;
-  char* custom_msg;
-  // Assigned automatically with helper methods.
-  struct Workout* next;
-  struct Workout* previous;
-  struct Workout* child;
-  struct Workout* child_last;
-  struct Workout* parent;
-} Workout;
+typedef enum {BEFORE, MODIFY, AFTER} CursorType;
 
 typedef struct {
   Workout* workout;
@@ -52,38 +40,6 @@ typedef struct {
 
 static Workout *root;
 static Cursor cursor;
-
-static void workout_to_str(Workout* workout, char* output, int size, int selected) {
-  char selected_str[3] = "";
-  if (selected) {
-    snprintf(selected_str, sizeof(selected_str), " <");
-  }
-  
-  if (workout->type == ROOT) {
-    snprintf(output, size, "ROOT%s", selected_str);
-  } else if (workout->type == REPETITIONS) {
-    snprintf(output, size, "%dx", workout->numeric_data);
-  } else if (workout->type == ACTIVITY) {
-    if (workout->numeric_type_data == METERS) {
-      snprintf(output, size, "%dm%s", workout->numeric_data, selected_str);
-    } else {
-      // TODO: add other distances
-      snprintf(output, size, "%d units%s", workout->numeric_data, selected_str);
-    }
-  } else if (workout->type == REST) {
-    if (workout->numeric_type_data == MINUTES) {
-      snprintf(output, size, "%d'r%s", workout->numeric_data, selected_str);
-    } else if (workout->numeric_type_data == SECONDS) {
-      snprintf(output, size, "%d\"r%s", workout->numeric_data, selected_str);
-    } else {
-      snprintf(output, size, "%d units%s", workout->numeric_data, selected_str);
-    }
-  } else if (workout->type == PLACEHOLDER) {
-    snprintf(output, size, "+%s", selected_str);
-  } else {
-    snprintf(output, size, "custom%s", selected_str);
-  }
-}
 
 static void move_cursor_down() {
   if (cursor.type == BEFORE) {
@@ -145,41 +101,6 @@ static void move_cursor_up() {
       cursor.type = MODIFY;
     } 
   }
-}
-
-static void workout_new(Workout* workout, WorkoutType type, int numeric_data, int numeric_type_data, char* custom_msg) {
-  workout->type = type;
-  workout->numeric_data = numeric_data;
-  workout->numeric_type_data = numeric_type_data;
-  workout->custom_msg = custom_msg;
-  workout->next = NULL;
-  workout->previous = NULL;
-  workout->child = NULL;
-  workout->child_last = NULL;
-  workout->parent = NULL;
-}
-
-static void workout_destroy(Workout* workout) {
-  if (workout->child) {
-    workout_destroy(workout->child);
-  }
-  if (workout->next) {
-    workout_destroy(workout->next);
-  }
-  free(workout);
-}
-
-static void workout_set_child(Workout* parent, Workout* child) {
-  parent->child = child;
-  parent->child_last = child;
-  child->parent = parent;
-}
-
-static void workout_add_sibling(Workout* workout, Workout* next) {
-  workout->next = next;
-  next->previous = workout;
-  next->parent = workout->parent;
-  workout->parent->child_last = next;
 }
 
 int recursive_draw(GContext* ctx, Workout* workout, int left, int top, int width) {
@@ -268,17 +189,23 @@ static void change_event(ActionMenu *action_menu, const ActionMenuItem *action, 
   }
 }
 
+void change_amount_callback(int amount) {
+  cursor.workout->numeric_data = amount;
+}
+
 static void change_amount(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
   if (cursor.type == MODIFY) {
-    cursor.workout->numeric_data = 13;
+    if (cursor.workout->type == REPETITIONS) {
+      show_number_picker(2, cursor.workout->numeric_data, "Select an amount", "repetitions", PICK_NUMBER, change_amount_callback);
+    } else if (cursor.workout->type == ACTIVITY) {
+      show_number_picker(4, cursor.workout->numeric_data, "Select a distance", (char*)distance_strings[cursor.workout->numeric_type_data], PICK_NUMBER, change_amount_callback);
+    } else if (cursor.workout->type == REST) {
+      show_number_picker(4, cursor.workout->numeric_data, "Select a rest time", NULL, PICK_TIME, change_amount_callback);
+    }
   }
 }
 
 static void delete_workout(Workout *past, DeleteType delete_type) {
-//   if (!past->child && past->parent && past->parent->child == past && past->parent->child_last == past) {
-//     delete_workout(past->parent);
-//   }
-  
   if (delete_type == DELETE_ALL) {
     if (past->child) {
       delete_workout(past->child, DELETE_ALL_BRANCH);
@@ -392,7 +319,7 @@ static void delete_event(ActionMenu *action_menu, const ActionMenuItem *action, 
   delete_workout(past, delete_type);
 }
 
-static void create_event(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
+static void create_event(int amount) {  
   int placeholder = cursor.workout->type == PLACEHOLDER;
   if (cursor.type == MODIFY && !placeholder) {
     return;
@@ -400,7 +327,7 @@ static void create_event(ActionMenu *action_menu, const ActionMenuItem *action, 
   
   // Create a new event.
   Workout* new_workout = (Workout *)malloc(sizeof(Workout));
-  workout_new(new_workout, ACTIVITY, 500, METERS, NULL);
+  workout_new(new_workout, saved_workout_type, amount, saved_amount_type, NULL);
   
   if (placeholder) {
     cursor.workout->type = new_workout->type;
@@ -438,11 +365,43 @@ static void create_event(ActionMenu *action_menu, const ActionMenuItem *action, 
     workout->next = new_workout;
   }
   
-  delete_workout(cursor.workout, DELETE_SHIFT);
+//   delete_workout(cursor.workout, DELETE_SHIFT);
   // Set the cursor to the new workout.
   cursor.workout = new_workout;
   cursor.type = MODIFY;
 }
+
+static void create_event_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
+  WorkoutType type = (WorkoutType)action_menu_item_get_action_data(action);
+  saved_workout_type = type;
+  saved_amount_type = 0;
+  if (type == REPETITIONS) {
+    show_number_picker(2, 2, "Select an amount", "repetitions", PICK_NUMBER, create_event);
+  } else if (type == REST) {
+    show_number_picker(4, 60, "Select a rest time", NULL, PICK_TIME, create_event);
+  }
+}
+
+static void create_distance_event_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
+  DistanceType type = (DistanceType)action_menu_item_get_action_data(action);
+  saved_workout_type = ACTIVITY;
+  saved_amount_type = type;
+  if (type == METERS) {
+    show_number_picker(4, 100, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
+  } else if (type == YARDS) {
+    show_number_picker(4, 100, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
+  } else if (type == KILOMETERS) {
+    show_number_picker(4, 1, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
+  } else if (type == MILES) {
+    show_number_picker(4, 1, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
+  } else if (type == FEET) {
+    show_number_picker(4, 100, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
+  } else if (type == UNKNOWN_DISTANCE) {
+    show_number_picker(4, 1, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
+  }
+}
+
+
 
 void creator_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (cursor.type == MODIFY && cursor.workout->type != PLACEHOLDER) {
@@ -494,12 +453,19 @@ static void init_action_menus() {
   action_menu_level_add_action(s_modify_repetitions_level, "Delete", delete_event, (void *)DELETE_SHIFT);
   action_menu_level_add_action(s_modify_repetitions_level, "Delete all in group", delete_event, (void *)DELETE_ALL);
   
-  s_create_event_level = action_menu_level_create(5);
-  action_menu_level_add_action(s_create_event_level, "Create repetitions", create_event, NULL);
-  action_menu_level_add_action(s_create_event_level, "Create distance event", create_event, NULL);
-  action_menu_level_add_action(s_create_event_level, "Create rest event", create_event, NULL);
-  action_menu_level_add_action(s_create_event_level, "Create gym event", create_event, NULL);
-  action_menu_level_add_action(s_create_event_level, "Create custom event", create_event, NULL);
+  s_create_event_level = action_menu_level_create(6);
+  action_menu_level_add_action(s_create_event_level, "Create repetitions", create_event_handler, (void *)REPETITIONS);
+  // Create and set up the secondary level, adding it as a child to the root one
+  s_distance_level = action_menu_level_create(6);
+  action_menu_level_add_child(s_create_event_level, s_distance_level, "Create distance event");
+  int i;
+  for (i = 0; i < 6; i++) {
+    // Set up the secondary actions
+    action_menu_level_add_action(s_distance_level, distance_strings[i], create_distance_event_handler, (void *)i);
+  }
+  action_menu_level_add_action(s_create_event_level, "Create rest event", create_event_handler, (void *)REST);
+  action_menu_level_add_action(s_create_event_level, "Create gym event", create_event_handler, NULL);
+  action_menu_level_add_action(s_create_event_level, "Create custom event", create_event_handler, NULL);
 }
 
 void up_single_click_handler(ClickRecognizerRef recognizer, void *context) {  

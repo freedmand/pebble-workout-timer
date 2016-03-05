@@ -216,9 +216,13 @@ void config_provider(Window *window) {
   window_single_click_subscribe(BUTTON_ID_SELECT, select_single_click_handler);
 }
 
+static void callback(int amount) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Received amount %d", amount);
+}
+
 static void init() {
-//   show_workout_creator();
-  show_number_picker(4, 800, "Select a distance", "meters", PICK_NUMBER);
+  show_workout_creator();
+//   show_number_picker(4, 800, "Select a distance", "meters", PICK_NUMBER, callback);
 //   show_timer_window();
 //   timer_window = window_create();
   
