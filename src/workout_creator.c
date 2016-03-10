@@ -26,84 +26,20 @@ static ActionMenuLevel* s_distance_level;
 static WorkoutType saved_workout_type;
 static int saved_amount_type;
 
+// Workout data
+static Workout *root;
+static Cursor cursor;
+
 #define LINE_HEIGHT 16
 #define LINE_TAB 28
 #define REPETITIONS_BOX_WIDTH 24
 #define REPETITIONS_LINE_WIDTH 2
 
-typedef enum {BEFORE, MODIFY, AFTER} CursorType;
-
-typedef struct {
-  Workout* workout;
-  CursorType type;
-} Cursor;
-
-static Workout *root;
-static Cursor cursor;
-
-static void move_cursor_down() {
-  if (cursor.type == BEFORE) {
-    cursor.type = MODIFY;
-  } else if (cursor.type == MODIFY) {
-    // Find child or next element
-    if (cursor.workout->child) {
-      cursor.workout = cursor.workout->child;
-      cursor.type = cursor.workout->type == PLACEHOLDER ? MODIFY : BEFORE;
-    } else if (cursor.workout->next) {
-      cursor.workout = cursor.workout->next;
-      cursor.type = BEFORE;
-    } else {
-      if (cursor.workout->type == PLACEHOLDER) {
-        if (cursor.workout->parent && cursor.workout->parent->next) {
-          cursor.workout = cursor.workout->parent->next;
-          cursor.type = BEFORE;
-        }
-      } else {
-        cursor.type = AFTER;
-      }
-    }
-  } else if (cursor.type == AFTER) {
-    if (cursor.workout->next && !cursor.workout->child) {
-      cursor.workout = cursor.workout->next;
-      cursor.type = MODIFY;
-    } else if (cursor.workout->parent && cursor.workout->parent->next) {
-      cursor.workout = cursor.workout->parent->next;
-      cursor.type = BEFORE;
-    }
-  }
-}
-
-static void move_cursor_up() {
-  if (cursor.type == AFTER) {
-    cursor.type = MODIFY;
-  } else if (cursor.type == MODIFY) {
-    // Find previous or parent element
-    if (cursor.workout->previous && !cursor.workout->previous->child) {
-      cursor.workout = cursor.workout->previous;
-      cursor.type = AFTER;
-    } else {
-      if (cursor.workout->type == PLACEHOLDER && cursor.workout->parent) {
-        cursor.workout = cursor.workout->parent;
-        cursor.type = MODIFY;
-      } else {
-        cursor.type = BEFORE;
-      }
-    }
-  } else if (cursor.type == BEFORE) {
-    if (cursor.workout->previous && !cursor.workout->previous->child) {
-      cursor.workout = cursor.workout->previous;
-      cursor.type = MODIFY;
-    } else if (cursor.workout->previous && cursor.workout->previous->child_last) {
-      cursor.workout = cursor.workout->previous->child_last;
-      cursor.type = cursor.workout->type == PLACEHOLDER ? MODIFY : AFTER;
-    } else if (cursor.workout->parent) {
-      cursor.workout = cursor.workout->parent;
-      cursor.type = MODIFY;
-    } 
-  }
-}
-
 int recursive_draw(GContext* ctx, Workout* workout, int left, int top, int width) {
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Drawing");
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Type: %d", workout->type);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Amount: %d", workout->numeric_data);
+  
   char str[15];
   int selected = cursor.workout == workout && cursor.type == MODIFY;
   workout_to_str(workout, str, sizeof(str), selected);
@@ -156,12 +92,6 @@ int recursive_draw(GContext* ctx, Workout* workout, int left, int top, int width
     }
   }
   
-  // Create a placeholder if none exists under repetitions event.
-  if (workout->type == REPETITIONS && !workout->child) {
-    Workout* placeholder = (Workout*)malloc(sizeof(Workout));
-    workout_new(placeholder, PLACEHOLDER, 0, 0, NULL);
-    workout_set_child(workout, placeholder);
-  }
   int lines = 1;
   if (workout->child) {
     int lines_drawn = recursive_draw(ctx, workout->child, left + LINE_TAB, top + LINE_HEIGHT, width);
@@ -180,6 +110,7 @@ static void update_main_layer(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   graphics_context_set_text_color(ctx, GColorBlack);
   recursive_draw(ctx, root->child, 5, 5, bounds.size.w);
+  APP_LOG(APP_LOG_LEVEL_DEBUG, "Done Drawing");
 }
 
 static void change_event(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
@@ -205,108 +136,6 @@ static void change_amount(ActionMenu *action_menu, const ActionMenuItem *action,
   }
 }
 
-static void delete_workout(Workout *past, DeleteType delete_type) {
-  if (delete_type == DELETE_ALL) {
-    if (past->child) {
-      delete_workout(past->child, DELETE_ALL_BRANCH);
-    }
-  } else if (delete_type == DELETE_ALL_BRANCH) {
-    if (past->child) {
-      delete_workout(past->child, DELETE_ALL_BRANCH);
-    }
-    if (past->next) {
-      delete_workout(past->next, DELETE_ALL_BRANCH);
-    }
-  }
-  
-  // Create special cases:
-  // Delete placeholder with parent of placeholder.
-  if (past->child && past->child->type == PLACEHOLDER) {
-    delete_workout(past->child, DELETE_SHIFT);
-  }
-  // If deleting last child of repetition event, create placeholder in place.
-  if (past->type != PLACEHOLDER && past->parent && !past->child && past->parent->type == REPETITIONS && past->parent->child == past && past->parent->child_last == past) {
-    past->type = PLACEHOLDER;
-    return;
-  }
-  
-  // Set the cursor to the next workout
-  if (past->child && past->child->type != PLACEHOLDER) {
-    cursor.workout = past->child;
-    cursor.type = MODIFY;
-  } else if (past->next) {
-    cursor.workout = past->next;
-    cursor.type = MODIFY;
-  } else if (past->previous && past->previous->child) {
-    cursor.workout = past->previous->child_last;
-    cursor.type = MODIFY;
-  } else if (past->previous) {
-    cursor.workout = past->previous;
-    cursor.type = MODIFY;
-  } else if (past->parent && past->parent->next) {
-    cursor.workout = past->parent->next;
-    cursor.type = MODIFY;
-  } else if (past->parent) {
-    cursor.workout = past->parent;
-    cursor.type = MODIFY;
-  } else {
-    // TODO: Reset cursor.
-    APP_LOG(APP_LOG_LEVEL_DEBUG, "Nowhere to place cursor");
-  }
-  
-  // Make sure the workout's last child (if it has one) points to the next workout now.
-  if (past->child_last) {
-    past->child_last->next = past->next;
-    // And the next workout points to the workout's last child.
-    if (past->next) {
-      past->next->previous = past->child_last;
-    }
-  }
-  if (past->child) {
-    // If the workout is a parent and is the first child of its parent, set the first child of the parent to the workout's child.
-    if (past->parent && past->parent->child == past) {
-      past->parent->child = past->child;
-    }
-    // If the workout is a parent, ensure its first child points to the previous of the workout.
-    past->child->previous = past->previous;
-    // And the workout's previous (if it has one) points to the workout's first child.
-    if (past->previous) {
-      past->previous->next = past->child;
-    }
-  } else {
-    // If the workout is not a parent is the first child of its parent, set the parent's child to the workout's next.
-    if (past->parent && past->parent->child == past) {
-      past->parent->child = past->next;
-    }
-    // And if the workout is the last child of its parent, set the last child of the parent to the workout's previous.
-    if (past->parent && past->parent->child_last == past) {
-      past->parent->child_last = past->previous;
-    }
-    // If the workout is not a parent, set adjacent members' previous and nexts to accommodate for the workout's deletion.
-    if (past->previous) {
-      past->previous->next = past->next;
-    } else {
-      // If there is no previous
-    }
-    if (past->next) {
-      past->next->previous = past->previous;
-    }
-  }
-  // If the workout is the last child of its parent, set the last child of the parent to the last child of the workout.
-  if (past->parent && past->parent->child_last == past) {
-    past->parent->child_last = past->child_last;
-  }
-  // Cycle through each of the workout's children, assigning their parent to the workout's parent.
-  Workout* child = past->child;
-  while (child) {
-    child->parent = past->parent;
-    child = child->next;
-  }
-
-  // Delete the workout.
-  free(past);
-}
-
 static void delete_event(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
   if (cursor.type != MODIFY) {
     return;
@@ -316,59 +145,11 @@ static void delete_event(ActionMenu *action_menu, const ActionMenuItem *action, 
 
   // Get the delete type.
   DeleteType delete_type = (DeleteType)action_menu_item_get_action_data(action);
-  delete_workout(past, delete_type);
+  delete_workout(&cursor, past, delete_type);
 }
 
-static void create_event(int amount) {  
-  int placeholder = cursor.workout->type == PLACEHOLDER;
-  if (cursor.type == MODIFY && !placeholder) {
-    return;
-  }
-  
-  // Create a new event.
-  Workout* new_workout = (Workout *)malloc(sizeof(Workout));
-  workout_new(new_workout, saved_workout_type, amount, saved_amount_type, NULL);
-  
-  if (placeholder) {
-    cursor.workout->type = new_workout->type;
-    cursor.workout->numeric_data = new_workout->numeric_data;
-    cursor.workout->numeric_type_data = new_workout->numeric_type_data;
-    cursor.workout->custom_msg = new_workout->custom_msg;
-    free(new_workout);
-    return;
-  }
-  
-  Workout* workout = cursor.workout;
-  
-  new_workout->parent = workout->parent;
-  if (cursor.type == BEFORE) {
-    if (workout->previous) {
-      workout->previous->next = new_workout;
-    } else {
-      if (workout->parent && workout->parent->child == workout) {
-        workout->parent->child = new_workout;
-      }
-    }
-    new_workout->previous = workout->previous;
-    new_workout->next = workout;
-    workout->previous = new_workout;
-  } else if (cursor.type == AFTER) {
-    if (workout->next) {
-      workout->next->previous = new_workout;
-    } else {
-      if (workout->parent && workout->parent->child_last == workout) {
-        workout->parent->child_last = new_workout;
-      }
-    }
-    new_workout->next = workout->next;
-    new_workout->previous = workout;
-    workout->next = new_workout;
-  }
-  
-//   delete_workout(cursor.workout, DELETE_SHIFT);
-  // Set the cursor to the new workout.
-  cursor.workout = new_workout;
-  cursor.type = MODIFY;
+static void create_event(int amount) {
+  create_workout(&cursor, saved_workout_type, amount, saved_amount_type);
 }
 
 static void create_event_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
@@ -400,8 +181,6 @@ static void create_distance_event_handler(ActionMenu *action_menu, const ActionM
     show_number_picker(4, 1, "Select a distance", (char*)distance_strings[type], PICK_NUMBER, create_event);
   }
 }
-
-
 
 void creator_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (cursor.type == MODIFY && cursor.workout->type != PLACEHOLDER) {
@@ -469,12 +248,12 @@ static void init_action_menus() {
 }
 
 void up_single_click_handler(ClickRecognizerRef recognizer, void *context) {  
-  move_cursor_up();
+  move_cursor_up(&cursor);
   layer_mark_dirty(main_layer);
 }
 
 void down_single_click_handler(ClickRecognizerRef recognizer, void *context) {  
-  move_cursor_down();
+  move_cursor_down(&cursor);
   layer_mark_dirty(main_layer);
 }
 
@@ -505,54 +284,10 @@ static void initialise_ui(void) {
   
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Creating workout data");
   // Create workout data.
-  root = (Workout*)malloc(sizeof(Workout));
-  workout_new(root, REPETITIONS, 1, 0, NULL);
+  root = create_init(&cursor);
   
-  Workout* w_first_repeat = (Workout*)malloc(sizeof(Workout));
-  Workout* w_second_repeat = (Workout*)malloc(sizeof(Workout));
-  Workout* w_200m = (Workout*)malloc(sizeof(Workout));
-  Workout* w_30r = (Workout*)malloc(sizeof(Workout));
-  Workout* w_4r = (Workout*)malloc(sizeof(Workout));
-  Workout* w_3re = (Workout*)malloc(sizeof(Workout));
-  Workout* w_100m = (Workout*)malloc(sizeof(Workout));
-  Workout* w_20r = (Workout*)malloc(sizeof(Workout));
-  Workout* w_6r = (Workout*)malloc(sizeof(Workout));
-  Workout* w_600m = (Workout*)malloc(sizeof(Workout));
-  
-  workout_new(w_first_repeat, REPETITIONS, 22, 0, NULL);
-  workout_new(w_second_repeat, REPETITIONS, 3, 0, NULL);
-  workout_new(w_200m, ACTIVITY, 200, METERS, NULL);
-  workout_new(w_30r, REST, 30, SECONDS, NULL);
-  workout_new(w_4r, REST, 4, MINUTES, NULL);
-  workout_new(w_3re, REPETITIONS, 4, 0, NULL);
-  workout_new(w_100m, ACTIVITY, 100, METERS, NULL);
-  workout_new(w_20r, REST, 20, SECONDS, NULL);
-  workout_new(w_6r, REST, 6, MINUTES, NULL);
-  workout_new(w_600m, ACTIVITY, 600, METERS, NULL);
-  
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Assigning workout data hierarchy");
-  // Assign workout data hierarchy.
-  workout_set_child(root, w_first_repeat);
-  workout_set_child(w_first_repeat, w_second_repeat);
-  workout_set_child(w_second_repeat, w_200m);
-  workout_add_sibling(w_200m, w_30r);
-  workout_add_sibling(w_second_repeat, w_4r);
-  workout_add_sibling(w_4r, w_3re);
-  workout_add_sibling(w_3re, w_100m);
-  workout_add_sibling(w_100m, w_20r);
-  workout_add_sibling(w_first_repeat, w_6r);
-  workout_add_sibling(w_6r, w_600m);
-  
-  cursor.workout = w_first_repeat;
-  cursor.type = BEFORE;
-  
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Destroying resources");
-  
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Setting update procedure");
   layer_set_update_proc(main_layer, update_main_layer);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Adding child layer to window root layer");
   layer_add_child(root_layer, main_layer);
-  APP_LOG(APP_LOG_LEVEL_DEBUG, "Marking child layer as dirty");
   
   editor_action_bar = action_bar_layer_create();
   action_bar_layer_add_to_window(editor_action_bar, s_window);
