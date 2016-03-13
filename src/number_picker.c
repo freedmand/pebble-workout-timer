@@ -156,9 +156,9 @@ static void initialise_ui(void) {
                                              picker_config_provider);
 
   // Set the icons.
-  action_bar_layer_set_icon(picker_action_bar, BUTTON_ID_UP, up_bmp);
+  action_bar_layer_set_icon_animated(picker_action_bar, BUTTON_ID_UP, up_bmp, true);
   action_bar_layer_set_icon(picker_action_bar, BUTTON_ID_SELECT, right_bmp);
-  action_bar_layer_set_icon(picker_action_bar, BUTTON_ID_DOWN, down_bmp);
+  action_bar_layer_set_icon_animated(picker_action_bar, BUTTON_ID_DOWN, down_bmp, true);
   
   layer_mark_dirty(root_layer);
 }
