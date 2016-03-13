@@ -13,37 +13,37 @@
                 "file": "images/right_arrow.png",
                 "name": "right_icon",
                 "targetPlatforms": null,
-                "type": "bitmap"
+                "type": "png"
             },
             {
                 "file": "images/ellipses.png",
                 "name": "ellipses_icon",
                 "targetPlatforms": null,
-                "type": "bitmap"
+                "type": "png"
             },
             {
                 "file": "images/down_arrow.png",
                 "name": "down_icon",
                 "targetPlatforms": null,
-                "type": "bitmap"
+                "type": "png"
             },
             {
                 "file": "images/up_arrow.png",
                 "name": "up_icon",
                 "targetPlatforms": null,
-                "type": "bitmap"
+                "type": "png"
             },
             {
                 "file": "images/play_pause_icon.png",
                 "name": "play_pause_icon",
                 "targetPlatforms": null,
-                "type": "bitmap"
+                "type": "png"
             },
             {
                 "file": "images/stopwatch_icon.png",
                 "name": "stopwatch_icon",
                 "targetPlatforms": null,
-                "type": "bitmap"
+                "type": "png"
             }
         ]
     },
