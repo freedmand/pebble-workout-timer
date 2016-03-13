@@ -16,11 +16,20 @@ static Layer* main_layer;
 static ActionBarLayer* editor_action_bar;
 
 // Menus
-static ActionMenu* s_action_menu;
-static ActionMenuLevel* s_modify_event_level;
-static ActionMenuLevel* s_modify_repetitions_level;
-static ActionMenuLevel* s_create_event_level;
-static ActionMenuLevel* s_distance_level;
+static SimpleMenuLayer *s_modify_event_menu;
+static SimpleMenuLayer *s_modify_repetitions_menu;
+static SimpleMenuLayer *s_create_event_menu;
+static SimpleMenuLayer *s_distance_menu;
+
+static SimpleMenuSection s_modify_event_sections[1];
+static SimpleMenuSection s_modify_repetitions_sections[1];
+static SimpleMenuSection s_create_event_sections[1];
+static SimpleMenuSection s_distance_sections[1];
+
+static SimpleMenuItem s_modify_event_items[2];
+static SimpleMenuItem s_modify_repetitions_items[3];
+static SimpleMenuItem s_create_event_items[3];
+static SimpleMenuItem s_distance_items[6];
 
 // Create pending data
 static WorkoutType saved_workout_type;
@@ -113,7 +122,7 @@ static void update_main_layer(Layer *layer, GContext *ctx) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Done Drawing");
 }
 
-static void change_event(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
+static void change_event(int index, void *context) {
   if (cursor.type == MODIFY) {
     cursor.workout->numeric_data = 12;
     cursor.workout->numeric_type_data = METERS;
@@ -124,7 +133,7 @@ void change_amount_callback(int amount) {
   cursor.workout->numeric_data = amount;
 }
 
-static void change_amount(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
+static void change_amount(int index, void *context) {
   if (cursor.type == MODIFY) {
     if (cursor.workout->type == REPETITIONS) {
       show_number_picker(2, cursor.workout->numeric_data, "Select an amount", "repetitions", PICK_NUMBER, change_amount_callback);
@@ -136,7 +145,7 @@ static void change_amount(ActionMenu *action_menu, const ActionMenuItem *action,
   }
 }
 
-static void delete_event(ActionMenu *action_menu, const ActionMenuItem *action, void *context) {
+static void delete_event(int index, void *context) {
   if (cursor.type != MODIFY) {
     return;
   }
@@ -144,7 +153,7 @@ static void delete_event(ActionMenu *action_menu, const ActionMenuItem *action, 
   Workout* past = cursor.workout;
 
   // Get the delete type.
-  DeleteType delete_type = (DeleteType)action_menu_item_get_action_data(action);
+  DeleteType delete_type = index == 2 ? DELETE_ALL : DELETE_SHIFT;
   delete_workout(&cursor, past, delete_type);
 }
 
@@ -152,8 +161,8 @@ static void create_event(int amount) {
   create_workout(&cursor, saved_workout_type, amount, saved_amount_type);
 }
 
-static void create_event_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
-  WorkoutType type = (WorkoutType)action_menu_item_get_action_data(action);
+static void create_event_handler(int index, void* context) {
+  WorkoutType type = index + 1;
   saved_workout_type = type;
   saved_amount_type = 0;
   if (type == REPETITIONS) {
@@ -163,8 +172,8 @@ static void create_event_handler(ActionMenu *action_menu, const ActionMenuItem *
   }
 }
 
-static void create_distance_event_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
-  DistanceType type = (DistanceType)action_menu_item_get_action_data(action);
+static void create_distance_event_handler(int index, void* context) {
+  DistanceType type = index;
   saved_workout_type = ACTIVITY;
   saved_amount_type = type;
   if (type == METERS) {
@@ -186,65 +195,95 @@ void creator_select_single_click_handler(ClickRecognizerRef recognizer, void *co
   if (cursor.type == MODIFY && cursor.workout->type != PLACEHOLDER) {
     if (cursor.workout->type == REPETITIONS) {
       // Show repetitions-specific modify menu.
-      ActionMenuConfig config = (ActionMenuConfig) {
-        .root_level = s_modify_repetitions_level,
-        .colors = {
-          .background = GColorWhite,
-          .foreground = GColorBlack,
-        },
-        .align = ActionMenuAlignCenter
-      };
-      s_action_menu = action_menu_open(&config);
+      layer_add_child(main_layer, simple_menu_layer_get_layer(s_modify_repetitions_menu));
     } else {
       // Show general event modify menu.
-      ActionMenuConfig config = (ActionMenuConfig) {
-        .root_level = s_modify_event_level,
-        .colors = {
-          .background = GColorWhite,
-          .foreground = GColorBlack,
-        },
-        .align = ActionMenuAlignCenter
-      };
-      s_action_menu = action_menu_open(&config);
+      layer_add_child(main_layer, simple_menu_layer_get_layer(s_modify_event_menu));
     }
   } else {
     // Show create event menu.
-    ActionMenuConfig config = (ActionMenuConfig) {
-      .root_level = s_create_event_level,
-      .colors = {
-        .background = GColorWhite,
-        .foreground = GColorBlack,
-      },
-        .align = ActionMenuAlignCenter
-    };
-    s_action_menu = action_menu_open(&config);
+    layer_add_child(main_layer, simple_menu_layer_get_layer(s_create_event_menu));
   }
 }
 
 static void init_action_menus() {
-  s_modify_event_level = action_menu_level_create(3);
-  action_menu_level_add_action(s_modify_event_level, "Change Amount", change_amount, NULL);
-  action_menu_level_add_action(s_modify_event_level, "Delete", delete_event, (void *)DELETE_SHIFT);
-  action_menu_level_add_action(s_modify_event_level, "Change Event", change_event, NULL);
+  int num_items = 0;
+  // 2
+  s_modify_event_items[num_items++] = (SimpleMenuItem) {
+    .title = "Change amount",
+    .callback = change_amount,
+  };
+  s_modify_event_items[num_items++] = (SimpleMenuItem) {
+    .title = "Delete",
+    .callback = delete_event,
+  };
   
-  s_modify_repetitions_level = action_menu_level_create(3);
-  action_menu_level_add_action(s_modify_repetitions_level, "Change repetitions", change_amount, NULL);
-  action_menu_level_add_action(s_modify_repetitions_level, "Delete", delete_event, (void *)DELETE_SHIFT);
-  action_menu_level_add_action(s_modify_repetitions_level, "Delete all in group", delete_event, (void *)DELETE_ALL);
+  num_items = 0;
+  // 3
+  s_modify_repetitions_items[num_items++] = (SimpleMenuItem) {
+    .title = "Change repetitions",
+    .callback = change_amount,
+  };
+  s_modify_repetitions_items[num_items++] = (SimpleMenuItem) {
+    .title = "Delete",
+    .callback = delete_event,
+  };
+  s_modify_repetitions_items[num_items++] = (SimpleMenuItem) {
+    .title = "Delete whole rep",
+    .callback = delete_event,
+  };
   
-  s_create_event_level = action_menu_level_create(6);
-  action_menu_level_add_action(s_create_event_level, "Create repetitions", create_event_handler, (void *)REPETITIONS);
-  // Create and set up the secondary level, adding it as a child to the root one
-  s_distance_level = action_menu_level_create(6);
-  action_menu_level_add_child(s_create_event_level, s_distance_level, "Create distance event");
-  int i;
-  for (i = 0; i < 6; i++) {
-    // Set up the secondary actions
-    action_menu_level_add_action(s_distance_level, distance_strings[i], create_distance_event_handler, (void *)i);
+  num_items = 0;
+  // 3
+  s_create_event_items[num_items++] = (SimpleMenuItem) {
+    .title = "Create repetitions",
+    .callback = create_event_handler,
+  };
+  s_create_event_items[num_items++] = (SimpleMenuItem) {
+    .title = "Create activity",
+    .subtitle = "Running workout",
+    .callback = create_event_handler,
+  };
+  s_create_event_items[num_items++] = (SimpleMenuItem) {
+    .title = "Create rest",
+    .subtitle = "Timed or untimed",
+    .callback = create_event_handler,
+  };
+  
+  // 6
+  for (num_items = 0; num_items < 6; num_items++) {
+    s_distance_items[num_items] = (SimpleMenuItem) {
+      .title = distance_strings[num_items],
+      .callback = create_distance_event_handler,
+    };
   }
-  action_menu_level_add_action(s_create_event_level, "Create rest event", create_event_handler, (void *)REST);
-  action_menu_level_add_action(s_create_event_level, "Create gym event", create_event_handler, NULL);
-  action_menu_level_add_action(s_create_event_level, "Create custom event", create_event_handler, NULL);
+  
+  s_modify_event_sections[0] = (SimpleMenuSection) {
+    .title = "Modify event",
+    .num_items = 2,
+    .items = s_modify_event_items,
+  };
+  s_modify_repetitions_sections[0] = (SimpleMenuSection) {
+    .title = "Modify event",
+    .num_items = 3,
+    .items = s_modify_repetitions_items,
+  };
+  s_create_event_sections[0] = (SimpleMenuSection) {
+    .title = "Modify event",
+    .num_items = 3,
+    .items = s_create_event_items,
+  };
+  s_distance_sections[0] = (SimpleMenuSection) {
+    .title = "Choose a distance unit",
+    .num_items = 6,
+    .items = s_distance_items,
+  };
+  
+  GRect bounds = layer_get_frame(main_layer);
+  s_modify_event_menu = simple_menu_layer_create(bounds, s_window, s_modify_event_sections, 1, NULL);
+  s_modify_repetitions_menu = simple_menu_layer_create(bounds, s_window, s_modify_repetitions_sections, 1, NULL);
+  s_create_event_menu = simple_menu_layer_create(bounds, s_window, s_create_event_sections, 1, NULL);
+  s_distance_menu = simple_menu_layer_create(bounds, s_window, s_distance_sections, 1, NULL);
 }
 
 void up_single_click_handler(ClickRecognizerRef recognizer, void *context) {  
@@ -275,7 +314,7 @@ static void initialise_ui(void) {
   ellipses_bmp = gbitmap_create_with_resource(RESOURCE_ID_ellipses_icon);
   
   // Initializing menus
-  init_action_menus();
+//   init_action_menus();
   
   s_window = window_create();
   Layer *root_layer = window_get_root_layer(s_window);
@@ -296,9 +335,9 @@ static void initialise_ui(void) {
                                              creator_config_provider);
 
   // Set the icons.
-  action_bar_layer_set_icon_animated(editor_action_bar, BUTTON_ID_UP, up_bmp, true);
+  action_bar_layer_set_icon(editor_action_bar, BUTTON_ID_UP, up_bmp);
   action_bar_layer_set_icon(editor_action_bar, BUTTON_ID_SELECT, ellipses_bmp);
-  action_bar_layer_set_icon_animated(editor_action_bar, BUTTON_ID_DOWN, down_bmp, true);
+  action_bar_layer_set_icon(editor_action_bar, BUTTON_ID_DOWN, down_bmp);
   
   layer_mark_dirty(main_layer);
 }
