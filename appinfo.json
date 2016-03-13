@@ -4,55 +4,46 @@
         ""
     ],
     "companyName": "freedmand@gmail.com",
-    "enableMultiJS": true,
     "longName": "Exercise Timer",
     "projectType": "native",
     "resources": {
         "media": [
             {
-                "file": "images/right_arrow.png",
-                "name": "right_icon",
-                "targetPlatforms": null,
-                "type": "png"
-            },
-            {
-                "file": "images/ellipses.png",
-                "name": "ellipses_icon",
-                "targetPlatforms": null,
-                "type": "png"
-            },
-            {
-                "file": "images/down_arrow.png",
-                "name": "down_icon",
-                "targetPlatforms": null,
-                "type": "png"
-            },
-            {
                 "file": "images/up_arrow.png",
                 "name": "up_icon",
-                "targetPlatforms": null,
-                "type": "png"
-            },
-            {
-                "file": "images/play_pause_icon.png",
-                "name": "play_pause_icon",
-                "targetPlatforms": null,
                 "type": "png"
             },
             {
                 "file": "images/stopwatch_icon.png",
                 "name": "stopwatch_icon",
-                "targetPlatforms": null,
+                "type": "png"
+            },
+            {
+                "file": "images/right_arrow.png",
+                "name": "right_icon",
+                "type": "png"
+            },
+            {
+                "file": "images/play_pause_icon.png",
+                "name": "play_pause_icon",
+                "type": "png"
+            },
+            {
+                "file": "images/ellipses.png",
+                "name": "ellipses_icon",
+                "type": "png"
+            },
+            {
+                "file": "images/down_arrow.png",
+                "name": "down_icon",
                 "type": "png"
             }
         ]
     },
-    "sdkVersion": "3",
+    "sdkVersion": "2",
     "shortName": "Exercise Timer",
-    "targetPlatforms": [
-        "aplite"
-    ],
     "uuid": "797e0697-c93c-4fac-aa13-1193a829e43a",
+    "versionCode": 1,
     "versionLabel": "1.0",
     "watchapp": {
         "watchface": false
