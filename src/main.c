@@ -2,6 +2,7 @@
 // #include "timer_window.h"
 #include "workout_creator.h"
 #include "number_picker.h"
+#include "workout_steps.h"
 
 static Window *timer_window;
 
@@ -220,8 +221,12 @@ static void callback(int amount) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Received amount %d", amount);
 }
 
+static void show_workout_steps(Workout* workout) {
+  
+}
+
 static void init() {
-  show_workout_creator();
+  show_workout_creator(NULL, show_workout_steps_window);
 //   show_number_picker(4, 800, "Select a distance", "meters", PICK_NUMBER, callback);
 //   show_timer_window();
 //   timer_window = window_create();

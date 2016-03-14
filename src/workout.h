@@ -16,6 +16,7 @@ typedef struct Workout {
   int numeric_data;
   int numeric_type_data;
   char* custom_msg;
+  int current_rep;
   // Assigned automatically with helper methods.
   struct Workout* next;
   struct Workout* previous;

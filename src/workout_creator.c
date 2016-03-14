@@ -2,6 +2,7 @@
 #include "workout_creator.h"
 #include "workout.h"
 #include "number_picker.h"
+#include "workout_steps.h"
 
 // Resources
 static GFont s_res_gothic_14;
@@ -29,6 +30,8 @@ static int saved_amount_type;
 // Workout data
 static Workout *root;
 static Cursor cursor;
+
+static void (*saved_callback)(Workout*);
 
 #define LINE_HEIGHT 16
 #define LINE_TAB 28
@@ -182,6 +185,10 @@ static void create_distance_event_handler(ActionMenu *action_menu, const ActionM
   }
 }
 
+static void hide_workout_creator_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
+  show_workout_steps_window(root);
+}
+
 void creator_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (cursor.type == MODIFY && cursor.workout->type != PLACEHOLDER) {
     if (cursor.workout->type == REPETITIONS) {
@@ -221,11 +228,13 @@ void creator_select_single_click_handler(ClickRecognizerRef recognizer, void *co
   }
 }
 
+
+
 static void init_action_menus() {
   s_modify_event_level = action_menu_level_create(3);
   action_menu_level_add_action(s_modify_event_level, "Change Amount", change_amount, NULL);
   action_menu_level_add_action(s_modify_event_level, "Delete", delete_event, (void *)DELETE_SHIFT);
-  action_menu_level_add_action(s_modify_event_level, "Change Event", change_event, NULL);
+  action_menu_level_add_action(s_modify_event_level, "Done", hide_workout_creator_handler, NULL);
   
   s_modify_repetitions_level = action_menu_level_create(3);
   action_menu_level_add_action(s_modify_repetitions_level, "Change repetitions", change_amount, NULL);
@@ -315,7 +324,8 @@ static void handle_window_unload(Window* window) {
   destroy_ui();
 }
 
-void show_workout_creator(void) {
+void show_workout_creator(Workout* init, void (*callback)(Workout*)) {
+  saved_callback = callback;
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
     .unload = handle_window_unload,
@@ -325,4 +335,5 @@ void show_workout_creator(void) {
 
 void hide_workout_creator(void) {
   window_stack_remove(s_window, true);
+  saved_callback(root);
 }
