@@ -1,5 +1,6 @@
 #include <pebble.h>
 #include "workout_steps.h"
+#include "workout.h"
 
 static Window* s_window;
 static Workout* root;
@@ -8,75 +9,20 @@ static ActionMenu *s_action_menu;
 static ActionMenuLevel *s_events_level;
 
 static int count;
+static int pos;
 static char** workouts;
 
-void reset_reps(Workout* root) {
-  root->current_rep = 0;
-  if (root->child) {
-    reset_reps(root->child);
-  }
-  if (root->next) {
-    reset_reps(root->next);
-  }
-}
-
-int workout_iterate(Workout* root, char** workouts) {
-  reset_reps(root);
-  char workout_str[15];
-  int depth = 0;
-
-  int count = 0;
-
-  Workout* current = root->child;
-  while (1) {
-    if (current->type != REPETITIONS && current->type != PLACEHOLDER) {
-      // print_spaces(depth);
-      if (workouts) {
-        workout_to_str(current, workout_str, sizeof(workout_str), 0);
-        strcpy(workouts[count], workout_str);
-      }
-      // printf("%s (%d)\n", workout_str, ++current->current_rep);
-      count++;
-    } else if (current->type == REPETITIONS && current->child && current->child->type != PLACEHOLDER) {
-      // print_spaces(depth);
-      // printf("REP %d/%d\n", current->current_rep + 1, current->numeric_data);
-      if (workouts) {
-        workout_to_str(current, workout_str, sizeof(workout_str), 0);
-        strcpy(workouts[count], workout_str);
-      }
-      count++;
-    }
-    if (current->child) {
-      current = current->child;
-      depth++;
-    } else if (current->next && !current->next->next && current->next->type == REST && current->parent && current->parent->type == REPETITIONS && current->parent->current_rep == current->parent->numeric_data - 1 && current->parent->next && current->parent->next->type == REST) {
-      // print_spaces(depth);
-      workout_to_str(current->next, workout_str, sizeof(workout_str), 0);
-      // printf("(skip) %s\n", workout_str);
-      current->parent->current_rep = 0;
-      current = current->parent->next;
-      depth--;
-    } else if (current->next) {
-      current = current->next;
-    } else if (current->parent && current->parent->type == REPETITIONS && current->parent->current_rep < current->parent->numeric_data - 1) {
-      current = current->parent;
-      current->current_rep++;
-      depth--;
-    } else if (current->parent && current->parent->next) {
-      current->parent->current_rep = 0;
-      current = current->parent->next;
-      depth--;
-    } else {
-      break;
-    }
-  }
-
-  return count;
-}
 static void action_performed_callback(ActionMenu *action_menu,
                                       const ActionMenuItem *action, void *context) {
   
 }
+
+static void add_to_workouts(Workout* workout) {
+  char workout_str[15];
+  workout_to_str(workout, workout_str, sizeof(workout_str), 0);
+  workouts[pos++] = workout_str;
+}
+
 static void init_action_menus() {
   count = workout_iterate(root, NULL);
 //   int count = 7;
@@ -85,7 +31,10 @@ static void init_action_menus() {
   for (i = 0; i < count; i++) {
     workouts[i] = (char*)malloc(sizeof(char) * 15);
   }
-  workout_iterate(root, workouts);
+  
+  pos = 0;
+  reset_reps(root);
+  workout_iterate(root, add_to_workouts);
   
   s_events_level = action_menu_level_create(count);
   for (i = 0; i < count; i++) {

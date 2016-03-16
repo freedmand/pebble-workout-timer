@@ -48,6 +48,11 @@ void reset_cursor(Cursor* cursor, Workout* root);
 Workout* create_init(Cursor* cursor);
 Workout* create_workout(Cursor* cursor, WorkoutType type, int amount, int numeric_type);
 
+// Workout iteration methods
+Workout* get_next(Workout* current);
+void reset_reps(Workout* root);
+int workout_iterate(Workout* root, void (*callback)(Workout*));
+
 #ifdef DEBUG
 void print_spaces(int spaces);
 void debug_print(Cursor* cursor, Workout* root);

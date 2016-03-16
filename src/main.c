@@ -1,8 +1,11 @@
 #include <pebble.h>
-// #include "timer_window.h"
+#include "timer_window.h"
 #include "workout_creator.h"
 #include "number_picker.h"
 #include "workout_steps.h"
+#include "stopwatch_mock.h"
+#include "stopwatch.h"
+#include "util.h"
 
 static Window *timer_window;
 
@@ -39,35 +42,7 @@ static GRect workout_time_bounds;
 
 static AppTimer *timer;
 
-const int TIMER_UPDATE_INTERVAL = 67;
-
-// Return time in milliseconds since epoch
-uint64_t get_time() {
-  time_t t = 0;
-  uint16_t t_ms = 0;
-  time_ms(&t, &t_ms);
-  
-  uint64_t total_time = (uint64_t)t * 1000 + t_ms;
-  return total_time;
-}
-
-// Supports up to 99 minutes, 59 seconds, and 99 centiseconds
-int millis_to_str(uint64_t millis, char* output) {
-  int round = millis % 10;
-  if (round >= 5) {
-    millis += 5;
-  }
-  
-  unsigned int cents = (millis / 10) % 100;
-  unsigned int seconds = (millis / 1000) % 60;
-  uint64_t minutes = (millis / 60000);
-  if (minutes > 99) {
-    return 0;
-  }
-  
-  snprintf(output, 9, "%02u:%02u.%02u", (unsigned int)minutes, seconds, cents);
-  return 1;
-}
+const int TIMER_UPDATE_INTERVAL2 = 67;
 
 static void update_layer_callback(Layer *layer, GContext *ctx) {
   uint64_t now = get_time();
@@ -77,7 +52,7 @@ static void update_layer_callback(Layer *layer, GContext *ctx) {
   } else {
     current_time = now - start_time;
   }
-  millis_to_str(current_time, main_count);
+  cents_to_str(current_time, main_count, sizeof(main_count));
   graphics_context_set_text_color(ctx, GColorBlack);
   
   // Draw workout time
@@ -86,7 +61,7 @@ static void update_layer_callback(Layer *layer, GContext *ctx) {
 
 static void timer_callback(void *data) {
   layer_mark_dirty(timer_window_layer);
-  timer = app_timer_register(TIMER_UPDATE_INTERVAL, timer_callback, NULL);
+  timer = app_timer_register(TIMER_UPDATE_INTERVAL2, timer_callback, NULL);
 }
 
 static void timer_window_load(Window *window) {
@@ -186,7 +161,7 @@ static void timer_window_load(Window *window) {
 
   start_time = get_time();
   layer_set_update_proc(main_timer_layer, update_layer_callback);
-  timer = app_timer_register(TIMER_UPDATE_INTERVAL, timer_callback, NULL);
+  timer = app_timer_register(TIMER_UPDATE_INTERVAL2, timer_callback, NULL);
   layer_add_child(timer_window_layer, main_timer_layer);
 }
 
@@ -221,13 +196,43 @@ static void callback(int amount) {
   APP_LOG(APP_LOG_LEVEL_DEBUG, "Received amount %d", amount);
 }
 
-static void show_workout_steps(Workout* workout) {
-  
-}
-
 static void init() {
-  show_workout_creator(NULL, show_workout_steps_window);
+  // Create test data
+  Workout *root;
+  Cursor cursor;
+
+  root = create_init(&cursor);
+
+  // Create workout data hierarchy.
+  create_workout(&cursor, REPETITIONS, 2, 0);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, REPETITIONS, 3, 0);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, ACTIVITY, 200, METERS);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, REST, 30, SECONDS);
+  move_cursor_down(&cursor);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, REST, 4, MINUTES);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, REPETITIONS, 4, 0);
+  move_cursor_down(&cursor);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, ACTIVITY, 100, METERS);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, REST, 20, SECONDS);
+  move_cursor_down(&cursor);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, REST, 6, MINUTES);
+  move_cursor_down(&cursor);
+  create_workout(&cursor, ACTIVITY, 600, METERS);
+  // Reset cursor.
+  reset_cursor(&cursor, root);
+  
+  
+//   show_workout_creator(NULL, show_workout_steps_window);
 //   show_number_picker(4, 800, "Select a distance", "meters", PICK_NUMBER, callback);
+  show_stopwatch_window(root);
 //   show_timer_window();
 //   timer_window = window_create();
   

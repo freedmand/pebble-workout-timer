@@ -48,6 +48,105 @@ void workout_to_str(Workout* workout, char* output, int size, int selected) {
   }
 }
 
+Workout* get_next(Workout* current) {
+  int starting = 1;
+  while (1) {
+    // Non-repetition or placeholder
+    if (current->type != REPETITIONS && current->type != PLACEHOLDER) {
+      if (!starting) {
+        return current;
+      } else {
+        starting = 0;
+      }
+    }
+    
+    if (current->child) {
+      current = current->child;
+    } else if (current->next && !current->next->next && current->next->type == REST && current->parent && current->parent->type == REPETITIONS && current->parent->current_rep == current->parent->numeric_data - 1 && current->parent->next && current->parent->next->type == REST) {
+      current->parent->current_rep = 0;
+      current = current->parent->next;
+    } else if (current->next) {
+      current = current->next;
+    } else if (current->parent && current->parent->type == REPETITIONS && current->parent->current_rep < current->parent->numeric_data - 1) {
+      current = current->parent;
+      current->current_rep++;
+    } else if (current->parent && current->parent->next) {
+      current->parent->current_rep = 0;
+      current = current->parent->next;
+    } else {
+      break;
+    }
+  }
+
+  return NULL;
+}
+
+void reset_reps(Workout* root) {
+  root->current_rep = 0;
+  if (root->child) {
+    reset_reps(root->child);
+  }
+  if (root->next) {
+    reset_reps(root->next);
+  }
+}
+
+int workout_iterate(Workout* current, void (*callback)(Workout*)) {
+  char workout_str[15];
+  int depth = 0;
+
+  int count = 0;
+
+  if (current->type == ROOT) {
+    current = current->child;
+  }
+  if (!current) {
+    return 0;
+  }
+  while (1) {
+    if (current->type != REPETITIONS && current->type != PLACEHOLDER) {
+      // print_spaces(depth);
+      if (callback) {
+        callback(current);
+      }
+      // printf("%s (%d)\n", workout_str, ++current->current_rep);
+      count++;
+    } else if (current->type == REPETITIONS && current->child && current->child->type != PLACEHOLDER) {
+      // print_spaces(depth);
+      // printf("REP %d/%d\n", current->current_rep + 1, current->numeric_data);
+//       if (callback) {
+//         callback(current);
+//       }
+//       count++;
+    }
+    if (current->child) {
+      current = current->child;
+      depth++;
+    } else if (current->next && !current->next->next && current->next->type == REST && current->parent && current->parent->type == REPETITIONS && current->parent->current_rep == current->parent->numeric_data - 1 && current->parent->next && current->parent->next->type == REST) {
+      // print_spaces(depth);
+      workout_to_str(current->next, workout_str, sizeof(workout_str), 0);
+      // printf("(skip) %s\n", workout_str);
+      current->parent->current_rep = 0;
+      current = current->parent->next;
+      depth--;
+    } else if (current->next) {
+      current = current->next;
+    } else if (current->parent && current->parent->type == REPETITIONS && current->parent->current_rep < current->parent->numeric_data - 1) {
+      current = current->parent;
+      current->current_rep++;
+      depth--;
+    } else if (current->parent && current->parent->next) {
+      current->parent->current_rep = 0;
+      current = current->parent->next;
+      depth--;
+    } else {
+      break;
+    }
+  }
+
+  return count;
+}
+
 void workout_new(Workout* workout, WorkoutType type, int numeric_data, int numeric_type_data, char* custom_msg) {
   workout->type = type;
   workout->numeric_data = numeric_data;
