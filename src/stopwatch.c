@@ -10,6 +10,7 @@ static Event* root_event;
 static Event* current_event;
 static int num_events;
 static int event_index;
+static int total_event_index;
 
 static int idx_shift;
 
@@ -41,7 +42,38 @@ static uint64_t pause_time;
 static uint64_t pause_deficit;
 static uint64_t total_pause_deficit;
 
-int TIMER_UPDATE_INTERVAL = 67;
+#define TIMER_RUNNING_INTERVAL 67
+int TIMER_UPDATE_INTERVAL = TIMER_RUNNING_INTERVAL;
+
+static void timer_callback(void *data) {
+  layer_mark_dirty(root_layer);
+  if (started && !paused && !stopped) {
+    timer = app_timer_register(TIMER_UPDATE_INTERVAL, timer_callback, NULL);
+  }
+}
+
+void insert_next_event(Event* current, Event* next) {
+  if (current->next) {
+    next->next = current->next;
+    current->next->previous = next;
+  }
+  current->next = next;
+  next->previous = current;
+}
+
+void insert_previous_event(Event* current, Event* previous) {
+  if (current->previous) {
+    previous->previous = current->previous;
+    current->previous->next = previous;
+  }
+  current->previous = previous;
+  previous->next = current;
+  
+  // Change root event if need be.
+  if (current == root_event) {
+    root_event = previous;
+  }
+}
 
 void select_handler() {
   if (!started || paused) {
@@ -56,6 +88,15 @@ void select_handler() {
         int deficit = get_time() - pause_time;
         pause_deficit += deficit;
         total_pause_deficit += deficit;
+
+        Event* pause_event = (Event*)malloc(sizeof(Event));
+        pause_event->start_time = pause_time;
+        pause_event->total_time = deficit;
+        pause_event->lap = -1;
+        pause_event->type = PAUSE;
+        pause_event->workout = NULL;
+        insert_previous_event(current_event, pause_event);
+        total_event_index++;
       }
     } else {
       // Start from beginning
@@ -75,13 +116,33 @@ void select_handler() {
     action_bar_layer_set_icon(stopwatch_action_bar, BUTTON_ID_DOWN, down_bmp);
     paused = 1;
     pause_time = get_time();
+    
+    Event* play_event = (Event*)malloc(sizeof(Event));
+    play_event->start_time = current_event->start_time;
+    play_event->total_time = pause_time - play_event->start_time;
+    play_event->lap = -1;
+    play_event->type = PLAY;
+    play_event->workout = NULL;
+    insert_previous_event(current_event, play_event);
+    total_event_index++;
   }
+  timer_callback(NULL);
 }
 
 void up_handler() {
   if (paused) {
     idx_shift = idx_shift == 0 ? 0 : idx_shift - 1;
+  } else {
+    Event* split_event = (Event*)malloc(sizeof(Event));
+    split_event->start_time = current_event->start_time;
+    split_event->total_time = get_time() - split_event->start_time - pause_deficit;
+    split_event->lap = -1;
+    split_event->type = SPLIT;
+    split_event->workout = NULL;
+    insert_previous_event(current_event, split_event);
+    total_event_index++;
   }
+  timer_callback(NULL);
 }
 
 void next_event() {
@@ -93,6 +154,7 @@ void next_event() {
     current_event = current_event->next;
     current_event->start_time = current_time;
     event_index++;
+    total_event_index++;
   } else {
     // Stop if at the end of the event chain.
     action_bar_layer_set_icon(stopwatch_action_bar, BUTTON_ID_UP, up_bmp);
@@ -106,17 +168,18 @@ void next_event() {
 
 void down_handler() {
   if (paused) {
-    idx_shift = idx_shift < event_index - 4 ? idx_shift + 1 : idx_shift;
+    idx_shift = idx_shift < total_event_index - 4 ? idx_shift + 1 : idx_shift;
   } else {
     next_event();
   }
+  timer_callback(NULL);
 }
 
 Event* get_previous(Event* current, int reps) {
   current = current->previous;
-  while (current && current->workout->type != ACTIVITY && current->workout->type != REST) {
-    current = current->previous;
-  }
+//   while (current && current->wo current->workout->type != ACTIVITY && current->workout->type != REST) {
+//     current = current->previous;
+//   }
   if (reps <= 0) {
     return current;
   } else {
@@ -196,12 +259,22 @@ static void update_ui(Layer *layer, GContext *ctx) {
   while (i < 4 && previous) {
     drew = 1;
     // Draw history line
-    snprintf(placeholder, sizeof(placeholder), "%03d", event_index - i - idx_shift);
-    graphics_draw_text(ctx, placeholder, s_res_gothic_14, GRect(2, drawing_v, 20, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    if (previous->type == NORMAL) {
+      snprintf(placeholder, sizeof(placeholder), "%03d", previous->lap);
+      graphics_draw_text(ctx, placeholder, s_res_gothic_14, GRect(2, drawing_v, 20, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
     cents_to_str(previous->total_time, placeholder, sizeof(placeholder));
     graphics_draw_text(ctx, placeholder, s_res_gothic_14_bold, GRect(23, drawing_v, 44, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    workout_to_str(previous->workout, workout_str, sizeof(workout_str), 0);
-    graphics_draw_text(ctx, workout_str, s_res_gothic_14, GRect(69, drawing_v, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    if (previous->workout) {
+      workout_to_str(previous->workout, workout_str, sizeof(workout_str), 0);
+      graphics_draw_text(ctx, workout_str, s_res_gothic_14, GRect(69, drawing_v, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);      
+    } else if (previous->type == PLAY) {
+      graphics_draw_text(ctx, "Play", s_res_gothic_14, GRect(69, drawing_v, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);      
+    } else if (previous->type == PAUSE) {
+      graphics_draw_text(ctx, "Pause", s_res_gothic_14, GRect(69, drawing_v, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);      
+    } else if (previous->type == SPLIT) {
+      graphics_draw_text(ctx, "Split", s_res_gothic_14, GRect(69, drawing_v, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);      
+    }
     // Increment counts
     drawing_v += 15;
     i++;
@@ -221,11 +294,6 @@ void stopwatch_config_provider(void *context) {
   window_single_click_subscribe(BUTTON_ID_UP, up_handler);
   window_single_click_subscribe(BUTTON_ID_SELECT, select_handler);
   window_single_click_subscribe(BUTTON_ID_DOWN, down_handler);
-}
-
-static void timer_callback(void *data) {
-  layer_mark_dirty(root_layer);
-  timer = app_timer_register(TIMER_UPDATE_INTERVAL, timer_callback, NULL);
 }
 
 static void initialise_ui(void) {
@@ -276,20 +344,13 @@ static void handle_window_unload(Window* window) {
   destroy_ui();
 }
 
-void insert_next_event(Event* current, Event* next) {
-  if (current->next) {
-    next->next = current->next;
-    current->next->previous = next;
-  }
-  current->next = next;
-  next->previous = current;
-}
-
 void populate_event_chain(Workout* workout) {
   if (!root_event) {
     root_event = (Event*)malloc(sizeof(Event));
     // Set start time?
+    root_event->type = NORMAL;
     root_event->start_time = 0;
+    root_event->lap = 1;
     root_event->workout = workout;
     root_event->previous = NULL;
     root_event->next = NULL;
@@ -297,7 +358,10 @@ void populate_event_chain(Workout* workout) {
   } else {
     Event* event = (Event*)malloc(sizeof(Event));
     event->workout = workout;
+    event->type = NORMAL;
     insert_next_event(current_event, event);
+    event->lap = current_event->lap + 1;
+    current_event = event;
   }
 }
 
@@ -315,7 +379,9 @@ void show_stopwatch_window(Workout* workout) {
   current_event = NULL;
   reset_reps(root_workout);
   num_events = workout_iterate(current_workout, populate_event_chain);
+  current_event = root_event;
   event_index = 0;
+  total_event_index = 0;
   
   initialise_ui();
   window_set_window_handlers(s_window, (WindowHandlers) {
