@@ -198,41 +198,41 @@ static void callback(int amount) {
 
 static void init() {
   // Create test data
-  Workout *root;
-  Cursor cursor;
+//   Workout *root;
+//   Cursor cursor;
 
-  root = create_init(&cursor);
+//   root = create_init(&cursor);
 
   // Create workout data hierarchy.
-  create_workout(&cursor, REPETITIONS, 2, 0);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, REPETITIONS, 3, 0);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, ACTIVITY, 200, METERS);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, REST, 30, SECONDS);
-  move_cursor_down(&cursor);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, REST, 4, MINUTES);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, REPETITIONS, 4, 0);
-  move_cursor_down(&cursor);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, ACTIVITY, 100, METERS);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, REST, 20, SECONDS);
-  move_cursor_down(&cursor);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, REST, 6, MINUTES);
-  move_cursor_down(&cursor);
-  create_workout(&cursor, ACTIVITY, 600, METERS);
-  // Reset cursor.
-  reset_cursor(&cursor, root);
+//   create_workout(&cursor, REPETITIONS, 2, 0);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, REPETITIONS, 3, 0);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, ACTIVITY, 200, METERS);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, REST, 30, SECONDS);
+//   move_cursor_down(&cursor);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, REST, 4, MINUTES);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, REPETITIONS, 4, 0);
+//   move_cursor_down(&cursor);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, ACTIVITY, 100, METERS);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, REST, 20, SECONDS);
+//   move_cursor_down(&cursor);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, REST, 6, MINUTES);
+//   move_cursor_down(&cursor);
+//   create_workout(&cursor, ACTIVITY, 600, METERS);
+//   reset_cursor(&cursor, root);
   
   
 //   show_workout_creator(NULL, show_workout_steps_window);
 //   show_number_picker(4, 800, "Select a distance", "meters", PICK_NUMBER, callback);
-  show_stopwatch_window(root);
+//   show_stopwatch_window(root);
+  show_workout_creator(NULL, show_stopwatch_window);
 //   show_timer_window();
 //   timer_window = window_create();
   

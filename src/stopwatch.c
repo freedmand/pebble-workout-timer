@@ -8,6 +8,8 @@ static Workout* root_workout;
 static Workout* current_workout;
 static Event* root_event;
 static Event* current_event;
+static Workout* next_workout;
+
 static int num_events;
 static int event_index;
 static int total_event_index;
@@ -141,6 +143,7 @@ void up_handler() {
     split_event->workout = NULL;
     insert_previous_event(current_event, split_event);
     total_event_index++;
+    vibes_short_pulse();
   }
   timer_callback(NULL);
 }
@@ -149,9 +152,21 @@ void next_event() {
   uint64_t current_time = get_time();
   current_event->total_time = current_time - current_event->start_time - pause_deficit;
   pause_deficit = 0;
-  if (current_event->next) {
+  if (next_workout) {
     vibes_short_pulse();
-    current_event = current_event->next;
+    
+    Event* event = (Event*)malloc(sizeof(Event));
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Getting next workout");
+    event->workout = get_next(current_event->workout, 1);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got next workout 1");
+    next_workout = get_next(event->workout, 0);
+    event->type = NORMAL;
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Got next workout 2");
+    insert_next_event(current_event, event);
+    APP_LOG(APP_LOG_LEVEL_DEBUG, "Inserted next event");
+    event->lap = current_event->lap + 1;
+    current_event = event;
+    
     current_event->start_time = current_time;
     event_index++;
     total_event_index++;
@@ -163,6 +178,7 @@ void next_event() {
     paused = 1;
     stopped = 1;
     pause_time = get_time();
+    vibes_short_pulse();
   }
 }
 
@@ -207,7 +223,12 @@ static void update_ui(Layer *layer, GContext *ctx) {
   // Rep line
   graphics_draw_text(ctx, "Rep", s_res_gothic_14_bold, GRect(0, 16, 22, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
   graphics_draw_text(ctx, "00:00.00", s_res_gothic_14, GRect(25, 16, 44, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  graphics_draw_text(ctx, "0/0", s_res_gothic_14_bold, GRect(71, 16, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  if (0) {
+    snprintf(placeholder, sizeof(placeholder), "%d/%d", current_event->workout->current_rep + 1, current_event->workout->parent->numeric_data);
+    graphics_draw_text(ctx, placeholder, s_res_gothic_14_bold, GRect(71, 16, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  } else {
+    graphics_draw_text(ctx, "1/1", s_res_gothic_14_bold, GRect(71, 16, 42, 15), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  }
   
   // Horizontal rule
   graphics_context_set_stroke_color(ctx, GColorBlack);
@@ -215,8 +236,8 @@ static void update_ui(Layer *layer, GContext *ctx) {
   graphics_draw_line(ctx, GPoint(4, 34), GPoint(103, 34));
   
   // Next line
-  if (current_event->next) {
-    workout_to_str(current_event->next->workout, workout_str, sizeof(workout_str), 0);
+  if (next_workout) {
+    workout_to_str(next_workout, workout_str, sizeof(workout_str), 0);
     snprintf(placeholder, sizeof(placeholder), "Next: (%d) %s", event_index + 2, workout_str);
     graphics_draw_text(ctx, placeholder, s_res_gothic_18, GRect(2, 34, 111, 19), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   } else {
@@ -373,13 +394,21 @@ void show_stopwatch_window(Workout* workout) {
   pause_deficit = 0;
   total_pause_deficit = 0;
   root_workout = workout;
-  current_workout = workout->child;
   
-  root_event = NULL;
-  current_event = NULL;
   reset_reps(root_workout);
-  num_events = workout_iterate(current_workout, populate_event_chain);
+  num_events = workout_iterate(workout, NULL);
+  reset_reps(root_workout);
+  
+  root_event = (Event*)malloc(sizeof(Event));
+  root_event->type = NORMAL;
+  root_event->start_time = 0;
+  root_event->lap = 1;
+  root_event->workout = get_next(workout->child, 1);
+  root_event->previous = NULL;
+  root_event->next = NULL;
+  
   current_event = root_event;
+  next_workout = get_next(current_event->workout, 0);
   event_index = 0;
   total_event_index = 0;
   

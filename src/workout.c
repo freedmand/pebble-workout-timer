@@ -48,35 +48,107 @@ void workout_to_str(Workout* workout, char* output, int size, int selected) {
   }
 }
 
-Workout* get_next(Workout* current) {
+typedef struct {
+  Workout* workout;
+  int rep;
+} RepReset;
+
+int in_resets(Workout* workout, RepReset* resets, int size) {
+  int i;
+  for (i = 0; i < size; i++) {
+    if (resets[i].workout == workout) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void restore_resets(RepReset* resets, int size) {
+  int i;
+  for (i = 0; i < size; i++) {
+    resets[i].workout->current_rep = resets[i].rep;
+  }
+}
+
+Workout* get_next(Workout* current, int affect_reps) {
   int starting = 1;
+
+  if (current->type == ROOT) {
+    current = current->child;
+    starting = 0;
+  }
+  if (!current) {
+    return NULL;
+  }
+  
+  #pragma GCC diagnostic push
+  #pragma GCC diagnostic ignored "-Wuninitialized"
+  RepReset* resets = (RepReset*)malloc(sizeof(RepReset) * 10);
+  int num_resets = 0;
+//   if (!affect_reps) {
+// //     resets = (RepReset*)malloc(sizeof(RepReset) * 10);
+//   }
   while (1) {
-    // Non-repetition or placeholder
     if (current->type != REPETITIONS && current->type != PLACEHOLDER) {
-      if (!starting) {
-        return current;
-      } else {
+      if (starting) {
         starting = 0;
+      } else {
+        if (!affect_reps) {
+          restore_resets(resets, num_resets);
+        }
+        free(resets);
+        return current;
       }
+    } else if (current->type == REPETITIONS && current->child && current->child->type != PLACEHOLDER) {
     }
     
     if (current->child) {
       current = current->child;
     } else if (current->next && !current->next->next && current->next->type == REST && current->parent && current->parent->type == REPETITIONS && current->parent->current_rep == current->parent->numeric_data - 1 && current->parent->next && current->parent->next->type == REST) {
+      if (!affect_reps) {
+        // Rep reset
+        if (!in_resets(current->parent, resets, num_resets)) {
+          RepReset reset = {current->parent, current->parent->current_rep};
+          resets[num_resets++] = reset;
+        }
+      }
       current->parent->current_rep = 0;
+
       current = current->parent->next;
     } else if (current->next) {
       current = current->next;
     } else if (current->parent && current->parent->type == REPETITIONS && current->parent->current_rep < current->parent->numeric_data - 1) {
       current = current->parent;
+      if (!affect_reps) {
+        // Rep reset
+        if (!in_resets(current, resets, num_resets)) {
+          RepReset reset = {current, current->current_rep};
+          resets[num_resets++] = reset;
+        }
+      }
       current->current_rep++;
+
     } else if (current->parent && current->parent->next) {
+      if (!affect_reps) {
+        // Rep reset
+        if (!in_resets(current->parent, resets, num_resets)) {
+          RepReset reset = {current->parent, current->parent->current_rep};
+          resets[num_resets++] = reset;
+        }
+      }
       current->parent->current_rep = 0;
+
       current = current->parent->next;
     } else {
       break;
     }
   }
+  
+  if (!affect_reps) {
+    restore_resets(resets, num_resets);
+  }
+  free(resets);
+  #pragma GCC diagnostic pop
 
   return NULL;
 }

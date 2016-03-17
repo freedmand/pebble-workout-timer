@@ -49,7 +49,7 @@ Workout* create_init(Cursor* cursor);
 Workout* create_workout(Cursor* cursor, WorkoutType type, int amount, int numeric_type);
 
 // Workout iteration methods
-Workout* get_next(Workout* current);
+Workout* get_next(Workout* current, int affect_reps);
 void reset_reps(Workout* root);
 int workout_iterate(Workout* root, void (*callback)(Workout*));
 
