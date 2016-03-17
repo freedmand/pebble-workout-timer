@@ -3,7 +3,8 @@
 // Enums
 typedef enum {ROOT, REPETITIONS, ACTIVITY, REST, CUSTOM, PLACEHOLDER} WorkoutType;
 typedef enum {REPETITION_PLACEHOLDER, END_PLACEHOLDER} PlaceholderType;
-typedef enum {METERS, YARDS, KILOMETERS, MILES, FEET, UNKNOWN_DISTANCE} DistanceType;
+typedef enum {TIMED_ACTIVITY, REP_TIMED_ACTIVITY, METERS, YARDS, KILOMETERS, MILES, FEET, UNKNOWN_DISTANCE} DistanceType;
+typedef enum {TIMED_REST, REP_TIMED_REST, UNTIMED_REST} RestType;
 typedef enum {MINUTES, SECONDS} TimeType;
 typedef enum {DELETE_SHIFT, DELETE_ALL, DELETE_ALL_BRANCH} DeleteType;
 
@@ -49,7 +50,7 @@ Workout* create_init(Cursor* cursor);
 Workout* create_workout(Cursor* cursor, WorkoutType type, int amount, int numeric_type);
 
 // Workout iteration methods
-Workout* get_next(Workout* current, int affect_reps);
+Workout* get_next(Workout* current);
 void reset_reps(Workout* root);
 int workout_iterate(Workout* root, void (*callback)(Workout*));
 

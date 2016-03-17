@@ -186,7 +186,7 @@ static void create_distance_event_handler(ActionMenu *action_menu, const ActionM
 }
 
 static void hide_workout_creator_handler(ActionMenu *action_menu, const ActionMenuItem *action, void* context) {
-  saved_callback(root);
+  show_workout_steps_window(root);
 }
 
 void creator_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {

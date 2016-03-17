@@ -48,107 +48,35 @@ void workout_to_str(Workout* workout, char* output, int size, int selected) {
   }
 }
 
-typedef struct {
-  Workout* workout;
-  int rep;
-} RepReset;
-
-int in_resets(Workout* workout, RepReset* resets, int size) {
-  int i;
-  for (i = 0; i < size; i++) {
-    if (resets[i].workout == workout) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-void restore_resets(RepReset* resets, int size) {
-  int i;
-  for (i = 0; i < size; i++) {
-    resets[i].workout->current_rep = resets[i].rep;
-  }
-}
-
-Workout* get_next(Workout* current, int affect_reps) {
+Workout* get_next(Workout* current) {
   int starting = 1;
-
-  if (current->type == ROOT) {
-    current = current->child;
-    starting = 0;
-  }
-  if (!current) {
-    return NULL;
-  }
-  
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wuninitialized"
-  RepReset* resets = (RepReset*)malloc(sizeof(RepReset) * 10);
-  int num_resets = 0;
-//   if (!affect_reps) {
-// //     resets = (RepReset*)malloc(sizeof(RepReset) * 10);
-//   }
   while (1) {
+    // Non-repetition or placeholder
     if (current->type != REPETITIONS && current->type != PLACEHOLDER) {
-      if (starting) {
-        starting = 0;
-      } else {
-        if (!affect_reps) {
-          restore_resets(resets, num_resets);
-        }
-        free(resets);
+      if (!starting) {
         return current;
+      } else {
+        starting = 0;
       }
-    } else if (current->type == REPETITIONS && current->child && current->child->type != PLACEHOLDER) {
     }
     
     if (current->child) {
       current = current->child;
     } else if (current->next && !current->next->next && current->next->type == REST && current->parent && current->parent->type == REPETITIONS && current->parent->current_rep == current->parent->numeric_data - 1 && current->parent->next && current->parent->next->type == REST) {
-      if (!affect_reps) {
-        // Rep reset
-        if (!in_resets(current->parent, resets, num_resets)) {
-          RepReset reset = {current->parent, current->parent->current_rep};
-          resets[num_resets++] = reset;
-        }
-      }
       current->parent->current_rep = 0;
-
       current = current->parent->next;
     } else if (current->next) {
       current = current->next;
     } else if (current->parent && current->parent->type == REPETITIONS && current->parent->current_rep < current->parent->numeric_data - 1) {
       current = current->parent;
-      if (!affect_reps) {
-        // Rep reset
-        if (!in_resets(current, resets, num_resets)) {
-          RepReset reset = {current, current->current_rep};
-          resets[num_resets++] = reset;
-        }
-      }
       current->current_rep++;
-
     } else if (current->parent && current->parent->next) {
-      if (!affect_reps) {
-        // Rep reset
-        if (!in_resets(current->parent, resets, num_resets)) {
-          RepReset reset = {current->parent, current->parent->current_rep};
-          resets[num_resets++] = reset;
-        }
-      }
       current->parent->current_rep = 0;
-
       current = current->parent->next;
     } else {
       break;
     }
   }
-  
-  if (!affect_reps) {
-    restore_resets(resets, num_resets);
-  }
-  free(resets);
-  #pragma GCC diagnostic pop
 
   return NULL;
 }
@@ -163,11 +91,10 @@ void reset_reps(Workout* root) {
   }
 }
 
-int workout_iterate(Workout* current, void (*callback)(Workout*)) {
-  char workout_str[15];
-  int depth = 0;
-
-  int count = 0;
+// callback(workout, depth, count, current rep, total reps, next_rep)
+uint8_t workout_iterate(Workout* current, void (*callback)(Workout*, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t)) {
+  uint8_t depth = 0;
+  uint8_t count = 0;
 
   if (current->type == ROOT) {
     current = current->child;
@@ -175,29 +102,25 @@ int workout_iterate(Workout* current, void (*callback)(Workout*)) {
   if (!current) {
     return 0;
   }
+  // Whether or not it is the start of the next rep
+  int next_ping = 0;
   while (1) {
     if (current->type != REPETITIONS && current->type != PLACEHOLDER) {
-      // print_spaces(depth);
       if (callback) {
-        callback(current);
+        if (current->parent->type == REPETITIONS) {
+          callback(current, depth, count, current->parent->current_rep + 1, current->parent->numeric_data, next_ping);
+          next_ping = 0;
+        } else {
+          callback(current, depth, count, 0, 0, 0);
+        }
       }
-      // printf("%s (%d)\n", workout_str, ++current->current_rep);
       count++;
-    } else if (current->type == REPETITIONS && current->child && current->child->type != PLACEHOLDER) {
-      // print_spaces(depth);
-      // printf("REP %d/%d\n", current->current_rep + 1, current->numeric_data);
-//       if (callback) {
-//         callback(current);
-//       }
-//       count++;
     }
+    
     if (current->child) {
       current = current->child;
       depth++;
     } else if (current->next && !current->next->next && current->next->type == REST && current->parent && current->parent->type == REPETITIONS && current->parent->current_rep == current->parent->numeric_data - 1 && current->parent->next && current->parent->next->type == REST) {
-      // print_spaces(depth);
-      workout_to_str(current->next, workout_str, sizeof(workout_str), 0);
-      // printf("(skip) %s\n", workout_str);
       current->parent->current_rep = 0;
       current = current->parent->next;
       depth--;
@@ -206,6 +129,7 @@ int workout_iterate(Workout* current, void (*callback)(Workout*)) {
     } else if (current->parent && current->parent->type == REPETITIONS && current->parent->current_rep < current->parent->numeric_data - 1) {
       current = current->parent;
       current->current_rep++;
+      next_ping = 1;
       depth--;
     } else if (current->parent && current->parent->next) {
       current->parent->current_rep = 0;

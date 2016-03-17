@@ -10,30 +10,6 @@
     "resources": {
         "media": [
             {
-                "file": "images/split.png",
-                "name": "split_icon",
-                "targetPlatforms": null,
-                "type": "bitmap"
-            },
-            {
-                "file": "images/stop.png",
-                "name": "stop_icon",
-                "targetPlatforms": null,
-                "type": "bitmap"
-            },
-            {
-                "file": "images/pause.png",
-                "name": "pause_icon",
-                "targetPlatforms": null,
-                "type": "bitmap"
-            },
-            {
-                "file": "images/play.png",
-                "name": "play_icon",
-                "targetPlatforms": null,
-                "type": "bitmap"
-            },
-            {
                 "file": "images/up_arrow.png",
                 "name": "up_icon",
                 "targetPlatforms": null,
@@ -46,6 +22,18 @@
                 "type": "bitmap"
             },
             {
+                "file": "images/stop.png",
+                "name": "stop_icon",
+                "targetPlatforms": null,
+                "type": "bitmap"
+            },
+            {
+                "file": "images/split.png",
+                "name": "split_icon",
+                "targetPlatforms": null,
+                "type": "bitmap"
+            },
+            {
                 "file": "images/right_arrow.png",
                 "name": "right_icon",
                 "targetPlatforms": null,
@@ -54,6 +42,18 @@
             {
                 "file": "images/play_pause_icon.png",
                 "name": "play_pause_icon",
+                "targetPlatforms": null,
+                "type": "bitmap"
+            },
+            {
+                "file": "images/play.png",
+                "name": "play_icon",
+                "targetPlatforms": null,
+                "type": "bitmap"
+            },
+            {
+                "file": "images/pause.png",
+                "name": "pause_icon",
                 "targetPlatforms": null,
                 "type": "bitmap"
             },
